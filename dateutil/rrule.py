@@ -5,6 +5,7 @@ the recurrence rules documented in the
 `iCalendar RFC <http://www.ietf.org/rfc/rfc2445.txt>`_,
 including support for caching of results.
 """
+import bisect
 import itertools
 import datetime
 import calendar
@@ -176,7 +177,7 @@ class rrulebase(object):
                 pass
         return self._len
 
-    def before(self, dt, inc=False):
+    def old_before(self, dt, inc=False):
         """ Returns the last recurrence before the given datetime instance. The
             inc keyword defines what happens if dt is an occurrence. With
             inc=True, if dt itself is an occurrence, it will be returned. """
@@ -197,7 +198,7 @@ class rrulebase(object):
                 last = i
         return last
 
-    def after(self, dt, inc=False):
+    def old_after(self, dt, inc=False):
         """ Returns the first recurrence after the given datetime instance. The
             inc keyword defines what happens if dt is an occurrence. With
             inc=True, if dt itself is an occurrence, it will be returned.  """
@@ -214,6 +215,36 @@ class rrulebase(object):
                 if i > dt:
                     return i
         return None
+
+    def after(self, dt, inc=False):
+        if inc:
+            func = bisect.bisect_left
+        else:
+            func = bisect.bisect_right
+        modifier = 0
+        return self._search(dt, func, modifier)
+
+    def before(self, dt, inc=False):
+        if inc:
+            func = bisect.bisect_right
+        else:
+            func = bisect.bisect_left
+        modifier = -1
+        return self._search(dt, func, modifier)
+
+    def _search(self, dt, func, modifier):
+        limit = 0
+        if self._cache_complete:
+            gen = self._cache
+            limit = len(self._cache)
+        else:
+            gen = self
+            for p in range(10):
+                limit = 10**p
+                if self[limit] > dt:
+                    break
+        idx = func(gen, dt, 0, limit)
+        return gen[idx+modifier]
 
     def xafter(self, dt, count=None, inc=False):
         """
